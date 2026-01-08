@@ -1,12 +1,12 @@
 ### AWS RDS
 
-![image.png](attachment:3107ad68-676f-4cd4-a0a8-005c94ac197e:image.png)
+<img width="916" height="765" alt="image" src="https://github.com/user-attachments/assets/ea31c806-fd25-4d6c-b1a5-d48c6b69b8e5" />
 
 연결은 MY IP 만 접근 가능하도록 설정 후에 DB연결 완료하였다.
 
 ## PGVector 설치 + 랜덤데이터 생성
 
-![image.png](attachment:130c78bf-1e7f-4a40-99e3-e1b5131ea2a2:image.png)
+<img width="916" height="765" alt="image" src="https://github.com/user-attachments/assets/e67f4d06-1f0d-4971-beb0-4f4872723fb4" />
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
