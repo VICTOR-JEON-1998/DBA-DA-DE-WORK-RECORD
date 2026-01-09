@@ -65,3 +65,56 @@ Planning:
 Planning Time: 0.858 ms
 Execution Time: 56.031 ms
 ```
+
+
+
+### HNSW IDX 생성한 뒤 성능 확인
+
+<img width="922" height="959" alt="image" src="https://github.com/user-attachments/assets/ec0b36be-ec03-4715-80b8-21621f6f722d" />
+
+
+```sql
+
+create index on items using hnsw (embedding vector_cosine_ops)
+with (m=16 , ef_construction = 64);
+
+/*
+ * HNSW : 벡터 검색 시장에서 가장 성능이 뛰어나고 널리 쓰이는 표준 인덱스 알고리즘
+ *
+ */
+
+
+EXPLAIN (ANALYZE, BUFFERS)
+WITH query_vec AS (
+    SELECT array_agg(random())::vector(1536) as q_emb 
+    FROM generate_series(1, 1536)
+)
+SELECT id, embedding <=> (SELECT q_emb FROM query_vec) as distance
+FROM items
+ORDER BY distance ASC
+LIMIT 5;
+
+------------------------------------------
+
+Limit  (cost=101.18..121.39 rows=5 width=16) (actual time=5.936..12.193 rows=5 loops=1)
+  Buffers: shared hit=1148
+  CTE query_vec
+    ->  Aggregate  (cost=23.04..23.06 rows=1 width=32) (actual time=1.741..1.743 rows=1 loops=1)
+          ->  Function Scan on generate_series  (cost=0.00..15.36 rows=1536 width=0) (actual time=0.093..0.188 rows=1536 loops=1)
+  InitPlan 2
+    ->  CTE Scan on query_vec  (cost=0.00..0.02 rows=1 width=32) (actual time=1.745..1.746 rows=1 loops=1)
+  ->  Index Scan using items_embedding_idx on items  (cost=78.10..40500.00 rows=10000 width=16) (actual time=5.934..12.187 rows=5 loops=1)
+        Order By: (embedding <=> (InitPlan 2).col1)
+        Buffers: shared hit=1148
+Planning:
+  Buffers: shared hit=49 dirtied=3
+Planning Time: 4.866 ms
+Execution Time: 14.335 ms
+
+```
+인덱스를 생성한뒤에 동일한 쿼리를 실행할 때 한 번에 읽는 메모리의 크기가 현저히 줄어들었고, 메모리 I/O 대폭 감소함.
+
+
+
+
+
