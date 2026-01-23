@@ -1,11 +1,71 @@
-# Architecture
-- based on process
-- When Postgre get connection require, it copys itself by fork() to generate process that mapping with client by 1:1
-- It is expensive because it generates proecess for every request
+PostgreSQL
+
+MVCC
+Update 시 기존 데이터를 덮어쓰지 않고 새로운 버전의 행을 추가함.
+기존 행은 XMIN / XMAX (트랙잭션ID) 정보를 통해 해당 시점 이전의 사용자에게만 보이도록 마킹됨
+
+PostgreSQL에서 Update는 내부적으로 "기존 행 삭제 + 새 행 삽입"
+
+Updated가 5번 된다면, 실제 유효 데이터는 1건이지만, 삭제 표시된 4건의 Dead Tuple이 남아있음
+제떄 청소되지 않아서 테이블이 풍선처럼 부풀어오른 현상을 비대화 라고 함.
+DB는 유효 데이터를 찾기 위해 죽은 튜플까지 다 읽어야하기 때문에 느려질 수 밖에 없음
+
+Q. 이것은 PostgreSQL만 존재하는 현상인지? 죽은 튜플이 테이블에 어떠한 방식으로 붙어있는건지?
+A. MVCC를 위한 이전 버전을 쌓아두는 방식은 PG의 고유한 특징이다. undo 영억의 크기 제한 없이 트랜잭션을 길게 유지할 수 있는 장점이 있지만,
+그 대가로 테이블이 비대해지는 현상화 이를 청소해야한는 Vaccum의 의무를 갖게된다
 
 
-# Memory management
-Memory can be seprated two parts. One is Shared part, the other one is isolated part
+Q. 무조건 느려지는걸까? 예를들어서, 죽은 튜플보다 먼저 실제 live 튜플을 발견하는 경우가 있다면,
+그 때는 느려진다고 할 수 없지 않나?
+A 운 좋게 Live Tuple을 먼저 찾아서 CPU 연산은 줄일 수 있어도, I/O 관점에서는 여전히 느려진다는 것이 정답.
+DB는 할 줄 씩 읽지 않고, 페이지 단위로 읽는다.
+- 유효 데이터 1개를 읽기 위해서 쓰레기 데이터가 포함된 8KB 블록 전체를 읽어야함
+- 메모리에 쓰레기 데이터가 상주하여 유효 공간을 차지함
+- 최적화 불가 문제 (Visibility Map을 활용한 고속 스캔을 사용할 수 없음)
 
--Shared buffers
-  - 
+
+
+DBA의 대응 pg_stat_user_tables 뷰를 조회하여 n_dead_tup을 확인
+
+Q. 실제 쿼리 날리는 예시 확인하기 
+
+
+클러스터형 인덱스 
+영어 사전과 같다.
+데이터 자체가 인덱스 키 순서대로 물리적으로 정렬되어 있다.
+데이터가 곧 인덱스이고, 인덱스가 곧 데이터이다.
+따라서 테이블당 하나만 존재한다.
+PG에서는 CLUSTER 명령어를 통해서 테이블의 데이터 순서를 인덱스의 순서와 일치하도록 강제로 재배열 가능함
+CLUSTER orders USING order_date_idx; 명령어를 사용하면 PG는 테이블을 통으로 복사하면서 재배열함
+
+Q. 인덱스 순서대로 데이터를 재배열 한다고 하였는데, 인덱스 순서라는 것은 무슨 의미인가? 단순히 데이터 정렬과는 어떤 대비점을 갖는가?
+A. 인덱스 순서대로 재배열하는 Cluster의 의미: 인덱스 리프 노드의 순서가 데이터 페이지의 적재 순서와 같다는 의미. 
+재배열은 인덱스를 타고 데이터가 존재하는 각 페이지들에 접근해서 데이터를 가져온 다음, CPU의 연산을 이용해서 정렬해서 보여줌
+
+
+
+
+
+비클러스터형 인덱스
+PostgreSQL에서 Create Index로 만드는 대부분의 인덱스는 기본적으로 비클러스터형이다.
+PK도 비클러스터형이다.
+데이터가 들어오는 순서대로 빈 공간에 무작위로 쌓이며 이를 heap 구조라고 한다.
+데이터를 금방 찾기야 하겠지만, 인덱스 항목이 가리키는 TID(Block Number, Offset number)는 제각각임
+-> 디스크 헤드의 움직임이 비효율적이기 때문에 Random I/O가 발생됨
+
+
+
+Q. Select 쿼리를 날렸을때의 미시적인 동작 과정은 어떻게 될까?
+쿼리가 실행되면 단순히 데이터를 가져온다는 추상적인 개념을 넘어서, Backend process가 메모리와 디스크 사이를 
+오가며 페이지 단위로 데이터를 퍼 올리는 작업이 수행된다.
+Client가 Select 요청을 보내면 리스너 역할을 하는 Postmaster 프로세스가 이를 감지 -> Backend Process 생성 
+-> Backend Process는 SQL 문법을 검사하고 통계 정보를 바탕으로 가장 효율적인 실행 경로를 결정함
+-> 실행 계획에 따라 데이터를 찾을 때, 프로세스는 디스크로 바로 가지 않고 먼저 공유 메모리 영역(Shared Buffer)을 뒤짐
+-> 테이블의 데이터뿐만 아니라, 해당 테이블의 권한, 위치 등의 메타데이터도 Shared Buffer 내의 카탈로그 정보를 통해 확인
+-> Shared Buffer에 없으면 OS 파일 시스템을 통해 디스크의 데이터 파일에 접근하고 페이지를 읽어옴
+
+
+PG에서는 Cluster IDX 는 일회성 작업임
+이후에 새로 들어오는 Insert나 update 데이터는 다시 빈 공간 아무 데나 꽂힘
+CLUSTER 명령은 테이블에 Exclusive Lock을 걸기 때문에 서비스 중단 없이는 실행하기 힘듦
+
