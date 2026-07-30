@@ -36,7 +36,3 @@ Each case study follows: **Context → Problem (with numbers) → Approach → R
 
 ---
 
-## Connect
-
-- Blog: *(추가 예정)*
-- LinkedIn: *(추가 예정)*
