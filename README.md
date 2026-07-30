@@ -9,15 +9,6 @@ Real-world case studies and technical notes spanning **DBA (MSSQL/PostgreSQL) �
 
 ---
 
-## Highlights
-
-- 🔧 **[Case: Query performance improved via index redesign — Xs → Ys]** ([DBA_note](./DBA_note))
-- 📊 **[Case: ETL pipeline built for Z, reducing manual reporting time by N%]** ([DA_note](./DA_note) / [DE](./DE))
-- 🧠 **[pgvector: HNSW vs IVFFlat indexing benchmark at scale]** ([Pgvector](./Pgvector))
-- ⚙️ **[Automation: recurring DBA task automated with N hours/week saved]** ([Automation](./Automation))
-
-*(위 4개는 실제 케이스 제목/수치로 교체 필요 — 지금은 자리표시자)*
-
 ---
 
 ## Background
